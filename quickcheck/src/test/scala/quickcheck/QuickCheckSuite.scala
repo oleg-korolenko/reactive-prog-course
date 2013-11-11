@@ -6,9 +6,7 @@ import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 
 import org.scalatest.prop.Checkers
-import org.scalacheck.Arbitrary._
 import org.scalacheck.Prop
-import org.scalacheck.Prop._
 
 import org.scalatest.exceptions.TestFailedException
 
@@ -27,9 +25,12 @@ class QuickCheckSuite extends FunSuite with Checkers {
     assert(ok, "A bogus heap should NOT satisfy all properties. Try to find the bug!")
   }
 
+
   test("Binomial heap satisfies properties.") {
     check(new QuickCheckHeap with BinomialHeap)
   }
+
+
 
   test("Bogus (1) binomial heap does not satisfy properties.") {
     checkBogus(new QuickCheckHeap with Bogus1BinomialHeap)
@@ -43,11 +44,19 @@ class QuickCheckSuite extends FunSuite with Checkers {
     checkBogus(new QuickCheckHeap with Bogus3BinomialHeap)
   }
 
+
   test("Bogus (4) binomial heap does not satisfy properties.") {
     checkBogus(new QuickCheckHeap with Bogus4BinomialHeap)
   }
 
+
   test("Bogus (5) binomial heap does not satisfy properties.") {
     checkBogus(new QuickCheckHeap with Bogus5BinomialHeap)
   }
+
+
+
+
+
+
 }
