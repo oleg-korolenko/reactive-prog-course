@@ -1,7 +1,6 @@
 package nodescala
 
 
-
 import scala.language.postfixOps
 import scala.util.{Try, Success, Failure}
 import scala.collection._
@@ -13,17 +12,18 @@ import org.scalatest._
 import NodeScala._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
+import java.lang
 
 @RunWith(classOf[JUnitRunner])
 class NodeScalaSuite extends FunSuite {
 
-  test("A Future should always be created") {
+  test("always : A Future should always be created") {
     val always = Future.always(517)
 
     assert(Await.result(always, 0 nanos) == 517)
   }
 
-  test("A Future should never be created") {
+  test("never : A Future should never be completed") {
     val never = Future.never[Int]
 
     try {
@@ -33,6 +33,126 @@ class NodeScalaSuite extends FunSuite {
       case t: TimeoutException => // ok!
     }
   }
+
+  test("all : Should get exception for one of the T") {
+    val all = Future.all(List(Future("1"), Future(2 / 0), Future("end")))
+    try {
+      Await.result(all, 1 second)
+      assert(false)
+    } catch {
+      case t: ArithmeticException => // ok!
+    }
+  }
+
+  test("all : Should get result as all feautres in the list could be completed") {
+    val all = Future.all(List(Future("1"), Future("end")))
+    try {
+      Await.result(all, 1 second)
+    } catch {
+      case t: Exception => {
+        assert(false)
+      }
+    }
+  }
+
+
+  test("any : Should get result as all feautres in the list could be completed") {
+    val all = Future.any(List(Future("1"), Future("2"), Future("3")))
+    val result = Await.result(all, 1 second)
+    assert(result == "1" || result == "2" || result == "3")
+  }
+
+  test("delay : Future shouldn't be completed before delay") {
+    val f = Future.delay(Duration(5, SECONDS))
+    try {
+      Await.result(f, 1 second)
+      assert(false)
+    } catch {
+      case t: TimeoutException => {
+        assert(!f.isCompleted)
+      }
+    }
+
+  }
+
+  test("delay : Future should be completed after delay") {
+    val f = Future.delay(Duration(1, SECONDS))
+    try {
+      Await.result(f, 2 second)
+      assert(f.isCompleted)
+    } catch {
+      case t: TimeoutException => {
+        assert(false)
+      }
+    }
+
+  }
+
+  test("now : Future should be completed") {
+    val p = Promise[Int]()
+    p.success(1)
+    val result = p.future.now
+    assert(result == 1)
+  }
+
+  test("now : Not completed future should throw exception") {
+    val p = Promise[Int]()
+    try {
+      p.future.now
+      assert(false)
+    } catch {
+      case t: NoSuchElementException => {
+        assert(!p.future.isCompleted)
+      }
+    }
+
+  }
+
+  test("continuewith : should return result") {
+    val f1 = Future(3)
+    val resultFeature = Await.result(f1.continueWith(f => Future(f.now * 2)), 1 second)
+    val res = Await.result(resultFeature, 1 second)
+    assert(res == 6)
+
+  }
+
+  test("continuewith : should return exception") {
+    val f1 = Future(throw new NoSuchFieldException)
+    try {
+      val resultFeature = Await.result(f1.continueWith(p => Future(p.now.toString)), 1 second)
+      val res = Await.result(resultFeature, 1 second)
+      assert(false)
+    } catch {
+      case e: NoSuchFieldException => {
+        assert(true)
+      }
+    }
+  }
+
+
+  test("continue : should return result") {
+    val f1 = Future(3)
+    val resultFeature = Await.result(f1.continue(tr => Future(tr.get * 2)), 1 second)
+    val res = Await.result(resultFeature, 1 second)
+    assert(res == 6)
+
+  }
+
+  test("continue : should return exception") {
+    val f1 = Future(throw new NoSuchFieldException)
+
+
+    try {
+      val resultFeature = Await.result(f1.continue(tr => Future(tr.get)), 1 second)
+      Await.result(resultFeature, 1 second)
+      assert(false)
+    } catch {
+      case e: NoSuchFieldException => {
+        assert(true)
+      }
+    }
+  }
+
 
   test("CancellationTokenSource should allow stopping the computation") {
     val cts = CancellationTokenSource()
@@ -51,12 +171,37 @@ class NodeScalaSuite extends FunSuite {
     assert(Await.result(p.future, 1 second) == "done")
   }
 
+  test("test Future.run") {
+    import org.scalatest.concurrent.AsyncAssertions._
+    import org.scalatest.time._
+
+    val w = new Waiter
+
+    val working = Future.run() { ct =>
+      async {
+        while (ct.nonCancelled) {
+          Thread.sleep(200)
+        }
+        w { assert(true) }
+        w.dismiss()
+      }
+    }
+
+    Future.delay(1 seconds) onComplete {
+      case _ => working.unsubscribe()
+    }
+
+    w.await(Timeout(Span(2, Seconds)))
+  }
+
   class DummyExchange(val request: Request) extends Exchange {
     @volatile var response = ""
     val loaded = Promise[String]()
+
     def write(s: String) {
       response += s
     }
+
     def close() {
       loaded.success(response)
     }
