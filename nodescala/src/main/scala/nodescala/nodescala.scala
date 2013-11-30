@@ -55,8 +55,6 @@ trait NodeScala {
         while (token.nonCancelled) {
           val reqResult = Await.result(l.nextRequest(), Duration.Inf)
           respond(reqResult._2, token, handler(reqResult._1))
-
-
         }
       }
 
