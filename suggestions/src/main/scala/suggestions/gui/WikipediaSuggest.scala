@@ -108,7 +108,7 @@ object WikipediaSuggest extends SimpleSwingApplication with ConcreteSwingApi wit
     // TO IMPLEMENT
     val selections: Observable[String] = button.clicks.flatMap(_ => {
       val subject = ReplaySubject[String]
-      suggestionList.listData foreach (subject.onNext(_))
+      suggestionList.selection.items foreach (subject.onNext(_))
       subject
     }
     )
