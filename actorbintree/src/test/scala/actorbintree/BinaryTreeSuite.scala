@@ -27,12 +27,12 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
         requester.expectMsgType[OperationReply]
       } catch {
         case ex: Throwable if ops.size > 10 => {
-          println(s"Operation=${ops(i)}")
+          println(s" Operation  failure=${ops(i - 1)}")
           fail(s"failure to receive confirmation $i/${ops.size}", ex)
 
         }
         case ex: Throwable => {
-          println(s"Operation=${ops(i)}")
+          println(s"Operation  failure=${ops(i - 1)}")
           fail(s"failure to receive confirmation $i/${ops.size}\nRequests:" + ops.mkString("\n    ", "\n     ", ""), ex)
         }
       }
@@ -123,6 +123,7 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
     val ops = List(
       Insert(requesterRef, id = 100, 1),
       Contains(requesterRef, id = 50, 2),
+
       Remove(requesterRef, id = 10, 1),
       Insert(requesterRef, id = 20, 2),
       Contains(requesterRef, id = 80, 1),
@@ -140,6 +141,62 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
 
     verify(requester, ops, expectedReplies)
   }
+
+
+
+  test("my test") {
+    val requester = TestProbe()
+    val requesterRef = requester.ref
+    val ops1 = List(
+
+      Insert(requesterRef, id = 0, 80),
+
+
+      /**
+       *
+      Remove(requesterRef, id = 1, 47),
+      Contains(requesterRef, id = 2, 19),
+      Contains(requesterRef, id = 3, 94),
+      Contains(requesterRef, id = 4, 45),
+      Insert(requesterRef, id = 5, 30),
+      Insert(requesterRef, id = 6, 86),
+        */
+      Insert(requesterRef, id = 7, 56),
+      Remove(requesterRef, id = 8, 97)
+    )
+
+    val expectedReplies = List(
+      OperationFinished(id = 0),
+
+
+      /**
+       * OperationFinished(id = 1),
+      ContainsResult(id = 2, false),
+      ContainsResult(id = 3, false),
+      ContainsResult(id = 4, false),
+      OperationFinished(id = 5),
+      OperationFinished(id = 6),
+        */
+      OperationFinished(id = 7),
+      OperationFinished(id = 8)
+    )
+
+    val topNode = system.actorOf(Props[BinaryTreeSet])
+
+    ops1 foreach {
+      op =>
+        topNode ! op
+        if (op == Insert(requesterRef, id = 7, 56)) {
+          topNode ! GC
+        }
+    }
+    receiveN(requester, ops1, expectedReplies)
+    // topNode ! GC
+
+
+  }
+
+
 
   test("behave identically to built-in set (includes GC)") {
     val rnd = new Random()
@@ -173,7 +230,7 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
 
     val requester = TestProbe()
     val topNode = system.actorOf(Props[BinaryTreeSet])
-    val count = 50
+    val count = 10000
 
     val ops = randomOperations(requester.ref, count)
     val expectedReplies = referenceReplies(ops)

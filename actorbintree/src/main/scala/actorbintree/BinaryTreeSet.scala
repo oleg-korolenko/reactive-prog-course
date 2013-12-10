@@ -6,6 +6,7 @@ package actorbintree
 import akka.actor._
 import scala.collection.immutable.Queue
 import scala.util.Random
+import akka.actor.PoisonPill
 
 object BinaryTreeSet {
 
@@ -71,11 +72,15 @@ class BinaryTreeSet extends Actor {
   // optional
   /** Accepts `Operation` and `GC` messages. */
   val normal: Receive = {
-    case Insert(requester: ActorRef, id: Int, elem: Int) => root ! Insert(requester: ActorRef, id: Int, elem: Int)
+    case Insert(requester: ActorRef, id: Int, elem: Int) => {
+      root ! Insert(requester: ActorRef, id: Int, elem: Int)
+    }
     case Contains(requester: ActorRef, id: Int, elem: Int) => root ! Contains(requester: ActorRef, id: Int, elem: Int)
     case Remove(requester: ActorRef, id: Int, elem: Int) => root ! Remove(requester: ActorRef, id: Int, elem: Int)
     case GC => {
       val newRoot = createRoot
+      println(s"new root = $newRoot")
+      println(s"old  root = $root")
       context.become(garbageCollecting(newRoot))
       root ! CopyTo(newRoot)
     }
@@ -91,15 +96,15 @@ class BinaryTreeSet extends Actor {
     case GC => {}
     case CopyFinished => {
       try {
-        println(" treeset copy finished from "+sender)
-        println(" root "+root)
-        println(" newroot "+newRoot)
+        println(" treeset copy finished from " + sender)
+        println(" root " + root)
+        println(" newroot " + newRoot)
         pendingQueue foreach (el => {
           println(s"from queue = $el")
           newRoot ! el
         })
         pendingQueue = Queue.empty[Operation]
-        root ! PoisonPill
+        root ! akka.actor.PoisonPill
         root = newRoot
         context.become(normal)
       }
@@ -155,14 +160,16 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
           else {
             val newNode = context.actorOf(props(elem, false))
             subtrees = subtrees + (pos -> newNode)
+            println(OperationFinished(id) + "  from  " + this + " with value " + elem + " after insert to " + requester)
             requester ! OperationFinished(id)
-            //  println(OperationFinished(id))
+
           }
 
         }
         else {
           //elem equal to current node value
           if (removed) removed = false
+          println(OperationFinished(id) +"with value " + elem + " to " + requester)
           requester ! OperationFinished(id)
         }
       }
@@ -176,10 +183,14 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
         if (subtrees.contains(pos)) {
           subtrees(pos) ! Contains(requester: ActorRef, id: Int, elem: Int)
         }
-        else requester ! ContainsResult(id, false)
+        else {
+          println(ContainsResult(id, false) + " to " + requester)
+          requester ! ContainsResult(id, false)
+        }
       }
       else {
         //elem equal to current node value
+        println(ContainsResult(id, false) + " to " + requester)
         requester ! ContainsResult(id, !removed)
       }
     }
@@ -190,26 +201,36 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
           subtrees(pos) ! Remove(requester: ActorRef, id: Int, e: Int)
         }
         else {
+          println( "Remove finished with value  " + e + " to " + requester)
           requester ! OperationFinished(id)
-          // println(OperationFinished(id))
         }
       }
       else {
         //elem equal to current node value
         this.removed = true
+        println(OperationFinished(id) + "with value  " + this.elem + " to " + requester)
         requester ! OperationFinished(id)
-        // println(OperationFinished(id))
       }
     }
     case CopyTo(newT: ActorRef) => {
       try {
         if (subtrees.isEmpty && removed) {
+          println(CopyFinished + " no subtrees&removed to parent  " + context.parent)
           context.parent ! CopyFinished
         }
         else {
           context.become(copying(subtrees.values.toSet, removed))
-          subtrees.values foreach (n => n ! CopyTo(newT))
-          if (!removed) newT ! Insert(self, Random.nextInt(), elem)
+          if (!removed) {
+            println("Insert to new tree " + Insert(self, Random.nextInt(), elem))
+            newT ! Insert(self, -1, elem)
+          }
+          subtrees.values foreach (
+            n => {
+              println("Copy to subtrees  " + CopyTo(newT) + " to " + n)
+              n ! CopyTo(newT)
+            }
+            )
+
         }
       }
       catch {
@@ -228,7 +249,10 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
       try {
         val expectedLeft = expected - sender
         if (expectedLeft.isEmpty) {
-          if (insertConfirmed) copyFinished()
+          if (insertConfirmed) {
+            println("Sending up copyFinished to parent   " + context.parent + " from " + this + "with value " + this.elem)
+            context.parent ! CopyFinished
+          }
         }
         else context.become(copying(expectedLeft, insertConfirmed))
       }
@@ -238,7 +262,10 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
     }
     case OperationFinished(id: Int) => {
       try {
-        if (expected.isEmpty) copyFinished()
+        if (expected.isEmpty) {
+          println("Sending up copyFinished after OperationFInished to parent   " + context.parent + " from " + this + "with value " + this.elem)
+          context.parent ! CopyFinished
+        }
         else context.become(copying(expected, true))
       }
       catch {
@@ -248,10 +275,5 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
     case x => println("yahoo  : " + x)
   }
 
-  def copyFinished() {
-    context.become(normal)
-    context.parent ! CopyFinished
-
-  }
 
 }
