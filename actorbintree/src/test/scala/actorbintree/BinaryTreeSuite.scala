@@ -150,17 +150,15 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
     val ops1 = List(
 
       Insert(requesterRef, id = 0, 80),
-
-
-      /**
-       *
       Remove(requesterRef, id = 1, 47),
+
+
       Contains(requesterRef, id = 2, 19),
       Contains(requesterRef, id = 3, 94),
       Contains(requesterRef, id = 4, 45),
       Insert(requesterRef, id = 5, 30),
       Insert(requesterRef, id = 6, 86),
-        */
+
       Insert(requesterRef, id = 7, 56),
       Remove(requesterRef, id = 8, 97)
     )
@@ -169,14 +167,15 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
       OperationFinished(id = 0),
 
 
-      /**
-       * OperationFinished(id = 1),
+
+       OperationFinished(id = 1),
+
       ContainsResult(id = 2, false),
       ContainsResult(id = 3, false),
       ContainsResult(id = 4, false),
       OperationFinished(id = 5),
       OperationFinished(id = 6),
-        */
+
       OperationFinished(id = 7),
       OperationFinished(id = 8)
     )
@@ -191,7 +190,7 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
         }
     }
     receiveN(requester, ops1, expectedReplies)
-    // topNode ! GC
+
 
 
   }
@@ -230,7 +229,7 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
 
     val requester = TestProbe()
     val topNode = system.actorOf(Props[BinaryTreeSet])
-    val count = 10000
+    val count = 20
 
     val ops = randomOperations(requester.ref, count)
     val expectedReplies = referenceReplies(ops)
