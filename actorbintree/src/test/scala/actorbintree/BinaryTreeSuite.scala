@@ -3,17 +3,17 @@
  */
 package actorbintree
 
-import akka.actor.{ Props, ActorRef, ActorSystem }
-import org.scalatest.{ BeforeAndAfterAll, FlatSpec }
-import akka.testkit.{ TestProbe, ImplicitSender, TestKit }
+import akka.actor.{Props, ActorRef, ActorSystem}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec}
+import akka.testkit.{TestProbe, ImplicitSender, TestKit}
 import org.scalatest.matchers.ShouldMatchers
 import scala.util.Random
 import scala.concurrent.duration._
 import org.scalatest.FunSuite
+import java.util.concurrent.TimeUnit
 
 
-class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSuite with ShouldMatchers with BeforeAndAfterAll with ImplicitSender 
-{
+class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSuite with ShouldMatchers with BeforeAndAfterAll with ImplicitSender {
 
   def this() = this(ActorSystem("PostponeSpec"))
 
@@ -26,8 +26,15 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
       val repliesUnsorted = for (i <- 1 to ops.size) yield try {
         requester.expectMsgType[OperationReply]
       } catch {
-        case ex: Throwable if ops.size > 10 => fail(s"failure to receive confirmation $i/${ops.size}", ex)
-        case ex: Throwable                  => fail(s"failure to receive confirmation $i/${ops.size}\nRequests:" + ops.mkString("\n    ", "\n     ", ""), ex)
+        case ex: Throwable if ops.size > 10 => {
+          println(s"Operation=${ops(i)}")
+          fail(s"failure to receive confirmation $i/${ops.size}", ex)
+
+        }
+        case ex: Throwable => {
+          println(s"Operation=${ops(i)}")
+          fail(s"failure to receive confirmation $i/${ops.size}\nRequests:" + ops.mkString("\n    ", "\n     ", ""), ex)
+        }
       }
       val replies = repliesUnsorted.sortBy(_.id)
       if (replies != expectedReplies) {
@@ -39,50 +46,101 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
   def verify(probe: TestProbe, ops: Seq[Operation], expected: Seq[OperationReply]): Unit = {
     val topNode = system.actorOf(Props[BinaryTreeSet])
 
-    ops foreach { op =>
-      topNode ! op
+    ops foreach {
+      op =>
+        topNode ! op
     }
 
     receiveN(probe, ops, expected)
   }
 
+
   test("proper inserts and lookups") {
     val topNode = system.actorOf(Props[BinaryTreeSet])
-
     topNode ! Contains(testActor, id = 1, 1)
     expectMsg(ContainsResult(1, false))
-
     topNode ! Insert(testActor, id = 2, 1)
     topNode ! Contains(testActor, id = 3, 1)
-
     expectMsg(OperationFinished(2))
     expectMsg(ContainsResult(3, true))
   }
+
+
+
+  test("proper inserts,removes and lookups") {
+    val topNode = system.actorOf(Props[BinaryTreeSet])
+    topNode ! Contains(testActor, id = 1, 1)
+    expectMsg(ContainsResult(1, false))
+    topNode ! Insert(testActor, id = 2, 1)
+    expectMsg(OperationFinished(2))
+
+    topNode ! Remove(testActor, id = 3, 1)
+    expectMsg(OperationFinished(3))
+
+    topNode ! Contains(testActor, id = 4, 1)
+    expectMsg(ContainsResult(4, false))
+
+    topNode ! Insert(testActor, id = 5, 1)
+    expectMsg(OperationFinished(5))
+    topNode ! Contains(testActor, id = 6, 1)
+    expectMsg(ContainsResult(6, true))
+
+  }
+
+
+  test("a") {
+    val topNode = system.actorOf(Props[BinaryTreeSet])
+    topNode ! Remove(testActor, id = 0, 39)
+    topNode ! Insert(testActor, id = 1, 51)
+    topNode ! Contains(testActor, id = 2, 4)
+    topNode ! Remove(testActor, id = 3, 21)
+    topNode ! Insert(testActor, id = 4, 28)
+    topNode ! Remove(testActor, id = 5, 21)
+    topNode ! GC
+    topNode ! Insert(testActor, id = 6, 90)
+    topNode ! Insert(testActor, id = 7, 79)
+    topNode ! Insert(testActor, id = 8, 26)
+    topNode ! Insert(testActor, id = 9, 40)
+
+    expectMsg(OperationFinished(0))
+    expectMsg(OperationFinished(1))
+    expectMsg(ContainsResult(2, false))
+    expectMsg(OperationFinished(3))
+    expectMsg(OperationFinished(4))
+    expectMsg(OperationFinished(5))
+    expectMsg(OperationFinished(6))
+    expectMsg(OperationFinished(7))
+    expectMsg(OperationFinished(8))
+    expectMsg(OperationFinished(9))
+
+
+  }
+
 
   test("instruction example") {
     val requester = TestProbe()
     val requesterRef = requester.ref
     val ops = List(
-      Insert(requesterRef, id=100, 1),
-      Contains(requesterRef, id=50, 2),
-      Remove(requesterRef, id=10, 1),
-      Insert(requesterRef, id=20, 2),
-      Contains(requesterRef, id=80, 1),
-      Contains(requesterRef, id=70, 2)
-      )
-   
+      Insert(requesterRef, id = 100, 1),
+      Contains(requesterRef, id = 50, 2),
+      Remove(requesterRef, id = 10, 1),
+      Insert(requesterRef, id = 20, 2),
+      Contains(requesterRef, id = 80, 1),
+      Contains(requesterRef, id = 70, 2)
+    )
+
     val expectedReplies = List(
-      OperationFinished(id=10),
-      OperationFinished(id=20),
-      ContainsResult(id=50, false),
-      ContainsResult(id=70, true),
-      ContainsResult(id=80, false),
-      OperationFinished(id=100)     
-      )
+      OperationFinished(id = 10),
+      OperationFinished(id = 20),
+      ContainsResult(id = 50, false),
+      ContainsResult(id = 70, true),
+      ContainsResult(id = 80, false),
+      OperationFinished(id = 100)
+    )
 
     verify(requester, ops, expectedReplies)
   }
-  
+
   test("behave identically to built-in set (includes GC)") {
     val rnd = new Random()
     def randomOperations(requester: ActorRef, count: Int): Seq[Operation] = {
@@ -115,14 +173,19 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
 
     val requester = TestProbe()
     val topNode = system.actorOf(Props[BinaryTreeSet])
-    val count = 1000
+    val count = 50
 
     val ops = randomOperations(requester.ref, count)
     val expectedReplies = referenceReplies(ops)
 
-    ops foreach { op =>
-      topNode ! op
-      if (rnd.nextDouble() < 0.1) topNode ! GC
+    ops foreach {
+      op =>
+        println(s"sending $op")
+        topNode ! op
+        if (rnd.nextDouble() < 0.1) {
+          println("sending GC")
+          topNode ! GC
+        }
     }
     receiveN(requester, ops, expectedReplies)
   }
