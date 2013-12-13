@@ -27,12 +27,12 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
         requester.expectMsgType[OperationReply]
       } catch {
         case ex: Throwable if ops.size > 10 => {
-          println(s" Operation  failure=${ops(i - 1)}")
+          //println(s" Operation  failure=${ops(i - 1)}")
           fail(s"failure to receive confirmation $i/${ops.size}", ex)
 
         }
         case ex: Throwable => {
-          println(s"Operation  failure=${ops(i - 1)}")
+          //println(s"Operation  failure=${ops(i - 1)}")
           fail(s"failure to receive confirmation $i/${ops.size}\nRequests:" + ops.mkString("\n    ", "\n     ", ""), ex)
         }
       }
@@ -87,7 +87,7 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
 
   }
 
-
+  /**
   test("a") {
     val topNode = system.actorOf(Props[BinaryTreeSet])
     topNode ! Remove(testActor, id = 0, 39)
@@ -115,7 +115,7 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
 
 
   }
-
+  */
 
   test("instruction example") {
     val requester = TestProbe()
@@ -150,6 +150,7 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
     val ops1 = List(
 
       Insert(requesterRef, id = 0, 80),
+
       Remove(requesterRef, id = 1, 47),
 
 
@@ -192,11 +193,7 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
     receiveN(requester, ops1, expectedReplies)
 
 
-
   }
-
-
-
   test("behave identically to built-in set (includes GC)") {
     val rnd = new Random()
     def randomOperations(requester: ActorRef, count: Int): Seq[Operation] = {
@@ -229,17 +226,17 @@ class BinaryTreeSuite(_system: ActorSystem) extends TestKit(_system) with FunSui
 
     val requester = TestProbe()
     val topNode = system.actorOf(Props[BinaryTreeSet])
-    val count = 20
+    val count = 100000
 
     val ops = randomOperations(requester.ref, count)
     val expectedReplies = referenceReplies(ops)
 
     ops foreach {
       op =>
-        println(s"sending $op")
+        //println(s"sending $op")
         topNode ! op
         if (rnd.nextDouble() < 0.1) {
-          println("sending GC")
+          //println("sending GC")
           topNode ! GC
         }
     }
