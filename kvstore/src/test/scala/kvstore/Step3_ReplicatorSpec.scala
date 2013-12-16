@@ -62,19 +62,4 @@ with Tools {
 
     secondary.reply(SnapshotAck("k1", 0L))
   }
-
-  test("replicated :Replicator should send back replicated messsage") {
-    val primary = TestProbe()
-    val secondary = TestProbe()
-    val replicator = system.actorOf(Replicator.props(secondary.ref), "case2-replicator")
-
-    replicator ! Replicate("k1", Some("v1"), 0L)
-    secondary.expectMsg(Snapshot("k1", Some("v1"), 0L))
-    secondary.ignoreMsg({
-      case Snapshot(_, _, 0L) => true
-    })
-    secondary.reply(SnapshotAck("k1", 0L))
-
-  }
-
 }
