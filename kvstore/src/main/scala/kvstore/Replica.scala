@@ -28,6 +28,8 @@ object Replica {
 
   case class OperationAck(id: Long) extends OperationReply
 
+  case class PersistTimeout(id: Long) extends OperationReply
+
   case class OperationFailed(id: Long) extends OperationReply
 
   case class GetResult(key: String, valueOption: Option[String], id: Long) extends OperationReply
@@ -41,6 +43,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   import Replicator._
   import Persistence._
   import context._
+
   /*
    * The contents of this actor is just a suggestion, you can implement it in any way you like.
    */
@@ -61,29 +64,62 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     case JoinedSecondary => context.become(replica)
   }
 
-  /* TODO Behavior for  the leader role. */
-  val leader: Receive = {
+  /* Common Receive behaviour */
+  val common: Receive = {
+    case Get(key, id) => {
+      sender ! GetResult(key, kv.get(key), id)
+    }
+  }
+
+  /* Behavior for  the leader role. */
+  // mapping for sent to persistentr messages : id->(key,cancellable,sender)
+  var awaitPersistFromLeader = Map.empty[Long, (Cancellable, ActorRef)]
+  val leader: Receive = ({
     // TODO failed receive or remove , 1 second - >OperationFailed
     case Insert(key, value, id) => {
       kv += (key -> value)
-      //TODO send to all replicas
+      //TODO send to all Replicas via Replicators
+      kv += (key -> value)
+      val persister = context.actorOf(persistenceProps)
+      val persistCancellable = context.system.scheduler.schedule(0 milliseconds,
+        100 milliseconds,
+        persister,
+        Persist(key, Option(value), id))
 
-      sender ! OperationAck(id)
-    }
-    case Get(key, id) => {
-      sender ! GetResult(key, kv.get(key), id)
+      awaitPersistFromLeader += (id ->(persistCancellable, sender))
+      // persist timeout
+      context.system.scheduler.scheduleOnce(1 seconds,
+        self,
+        PersistTimeout(id))
     }
     case Remove(key, id) => {
       kv -= (key)
       sender ! OperationAck(id)
+    }
+    case Persisted(key, id) => {
+      val (cancellable, recipient) = awaitPersistFromLeader(id)
+      cancellable.cancel()
+      awaitPersistFromLeader -= id
+      recipient ! OperationAck(id)
+    }
+
+    case PersistTimeout(id) => {
+      sender ! PoisonPill
+      if (awaitPersistFromLeader.contains(id)) {
+        //timeout of 1 second
+        val (cancellable, recipient) = awaitPersistFromLeader(id)
+        cancellable.cancel()
+        awaitPersistFromLeader -= id
+        recipient ! OperationFailed(id)
+      }
+
     }
     case Replicas(replicas) => {
       //TODO check all replicas , add/remove
       ???
 
     }
-    case _ =>
-  }
+  }: Receive) orElse common
 
   override def supervisorStrategy: SupervisorStrategy = OneForOneStrategy() {
     case _: PersistenceException => {
@@ -99,29 +135,23 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   }
 
   // mapping for sent to persistentr messages : id->(key,seq)
-  var sentForPersistence = Map.empty[Long, (String, Long, Cancellable,ActorRef)]
-  /* TODO Behavior for the replica role. */
-  val replica: Receive = {
-    case Get(key, id) => {
-      sender ! GetResult(key, kv.get(key), id)
-    }
+  var awaitPersistFromReplica = Map.empty[Long, (String, Long, Cancellable, ActorRef)]
+
+  /* Behavior for the replica role. */
+  val replica: Receive = ({
     case Snapshot(key, value, seq) => {
       if (seq == seqNumber) {
         seqNumber += 1
         value match {
           case Some(s) => {
             kv += (key -> s)
-
             val id = new Random().nextLong()
-
             val persister = context.actorOf(persistenceProps)
-            //persister ! Persist(key, value, id)
-            //sender ! SnapshotAck(key, seq)
             val cancellable = context.system.scheduler.schedule(0 milliseconds,
               100 milliseconds,
               persister,
               Persist(key, value, id))
-            sentForPersistence += (id ->(key, seq, cancellable,sender))
+            awaitPersistFromReplica += (id ->(key, seq, cancellable, sender))
           }
           case None => {
             kv -= key
@@ -135,12 +165,12 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     }
     case Persisted(key, id) => {
       //TODO
-      val (_, seq,cancellable,recipient) = sentForPersistence(id)
+      val (_, seq, cancellable, recipient) = awaitPersistFromReplica(id)
       cancellable.cancel()
-      sentForPersistence -= (id)
+      awaitPersistFromReplica -= id
       recipient ! SnapshotAck(key, seq)
     }
-    case _ =>
-  }
+
+  }: Receive) orElse common
 
 }
