@@ -1,18 +1,14 @@
 package kvstore
 
-import akka.actor.{OneForOneStrategy, Props, ActorRef, Actor}
+import akka.actor._
 import kvstore.Arbiter._
-import scala.collection.immutable.Queue
 import akka.actor.SupervisorStrategy.Restart
-import scala.annotation.tailrec
-import akka.pattern.{ask, pipe}
-import akka.actor.Terminated
-import scala.concurrent.duration._
-import akka.actor.PoisonPill
-import akka.actor.OneForOneStrategy
-import akka.actor.SupervisorStrategy
-import akka.util.Timeout
 import java.util.Random
+import scala.concurrent.duration._
+import scala.Some
+import akka.actor.OneForOneStrategy
+import kvstore.Arbiter.Replicas
+
 
 object Replica {
 
@@ -44,8 +40,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   import Replica._
   import Replicator._
   import Persistence._
-  import context.dispatcher
-
+  import context._
   /*
    * The contents of this actor is just a suggestion, you can implement it in any way you like.
    */
@@ -90,6 +85,21 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     case _ =>
   }
 
+  override def supervisorStrategy: SupervisorStrategy = OneForOneStrategy() {
+    case _: PersistenceException => {
+      //TODO what to do with an actor
+      Restart
+
+    }
+    case _ => {
+      println("")
+      Restart
+    }
+
+  }
+
+  // mapping for sent to persistentr messages : id->(key,seq)
+  var sentForPersistence = Map.empty[Long, (String, Long, Cancellable,ActorRef)]
   /* TODO Behavior for the replica role. */
   val replica: Receive = {
     case Get(key, id) => {
@@ -103,10 +113,15 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
             kv += (key -> s)
 
             val id = new Random().nextLong()
-            val persister = context.actorOf(persistenceProps)
-            persister ! Persist(key, value, id)
-            sender ! SnapshotAck(key, seq)
 
+            val persister = context.actorOf(persistenceProps)
+            //persister ! Persist(key, value, id)
+            //sender ! SnapshotAck(key, seq)
+            val cancellable = context.system.scheduler.schedule(0 milliseconds,
+              100 milliseconds,
+              persister,
+              Persist(key, value, id))
+            sentForPersistence += (id ->(key, seq, cancellable,sender))
           }
           case None => {
             kv -= key
@@ -120,7 +135,10 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     }
     case Persisted(key, id) => {
       //TODO
-
+      val (_, seq,cancellable,recipient) = sentForPersistence(id)
+      cancellable.cancel()
+      sentForPersistence -= (id)
+      recipient ! SnapshotAck(key, seq)
     }
     case _ =>
   }
