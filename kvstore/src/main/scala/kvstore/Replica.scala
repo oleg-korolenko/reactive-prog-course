@@ -12,6 +12,7 @@ import akka.actor.PoisonPill
 import akka.actor.OneForOneStrategy
 import akka.actor.SupervisorStrategy
 import akka.util.Timeout
+import java.util.Random
 
 object Replica {
 
@@ -67,8 +68,11 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
   /* TODO Behavior for  the leader role. */
   val leader: Receive = {
+    // TODO failed receive or remove , 1 second - >OperationFailed
     case Insert(key, value, id) => {
       kv += (key -> value)
+      //TODO send to all replicas
+
       sender ! OperationAck(id)
     }
     case Get(key, id) => {
@@ -97,16 +101,25 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
         value match {
           case Some(s) => {
             kv += (key -> s)
+
+            val id = new Random().nextLong()
+            val persister = context.actorOf(persistenceProps)
+            persister ! Persist(key, value, id)
             sender ! SnapshotAck(key, seq)
+
           }
           case None => {
-            kv -= (key)
+            kv -= key
             sender ! SnapshotAck(key, seq)
           }
         }
       }
       else if (seq < seqNumber) sender ! SnapshotAck(key, seq)
       //else we drop message
+
+    }
+    case Persisted(key, id) => {
+      //TODO
 
     }
     case _ =>
