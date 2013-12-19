@@ -72,8 +72,9 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   }
 
   /* Behavior for  the leader role. */
-  // mapping for sent to persistentr messages : id->(key,cancellable,sender)
+  // mapping for sent to persistent messages : id->(key,cancellable,sender)
   var awaitPersistFromLeader = Map.empty[Long, (Cancellable, ActorRef)]
+  var awaitReplicate = Map.empty[ActorRef, List[Long]]
   val leader: Receive = ({
     // TODO failed receive or remove , 1 second - >OperationFailed
     case Insert(key, value, id) => {
@@ -115,6 +116,29 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
     }
     case Replicas(replicas) => {
+      var replToDoMap = Map.empty[ActorRef, List[Replicate]]
+      replicas foreach (rep => {
+        if (rep != self) {
+          //already know it
+          if (!secondaries.contains(rep)) {
+            val replicator = system.actorOf(Replicator.props(rep), "rep_" + new Random().nextLong())
+            secondaries += (rep -> replicator)
+            replicators += replicator
+            replToDoMap += replicator -> List.empty[Replicate]
+
+            //send all key-value to replicator
+            kv.foreach(key_value => {
+              val id = new Random().nextLong()
+              replToDoMap += replicator -> (replToDoMap(replicator) :+ Replicate(key_value._1, Option(key_value._2), id))
+              //replicator ! Replicate(key_value._1, Option(key_value._2), id )
+
+            })
+
+
+          }
+
+        }
+      })
       //TODO check all replicas , add/remove
       ???
 
@@ -127,11 +151,6 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
       Restart
 
     }
-    case _ => {
-      println("")
-      Restart
-    }
-
   }
 
   // mapping for sent to persistentr messages : id->(key,seq)
