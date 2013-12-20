@@ -13,11 +13,11 @@ import Persistence._
 import Replicator._
 
 class Step5_PrimaryPersistenceSpec extends TestKit(ActorSystem("Step5PrimaryPersistenceSpec"))
-  with FunSuite
-  with BeforeAndAfterAll
-  with ShouldMatchers
-  with ImplicitSender
-  with Tools {
+with FunSuite
+with BeforeAndAfterAll
+with ShouldMatchers
+with ImplicitSender
+with Tools {
 
   override def afterAll(): Unit = {
     system.shutdown()
@@ -75,7 +75,7 @@ class Step5_PrimaryPersistenceSpec extends TestKit(ActorSystem("Step5PrimaryPers
 
     val setId = client.set("foo", "bar")
     persistence.expectMsgType[Persist]
-    client.nothingHappens(800.milliseconds)  // Should not fail too early
+    client.nothingHappens(800.milliseconds) // Should not fail too early
     client.waitFailed(setId)
   }
 
