@@ -8,7 +8,7 @@ import scala.concurrent.duration._
 import scala.Some
 import akka.actor.OneForOneStrategy
 import kvstore.Arbiter.Replicas
-import kvstore.GlobalReplicationActor.{GlobalReplicated, GlobalReplicate}
+import kvstore.GlobalReplicator.KillMsgReplicator
 
 
 object Replica {
@@ -31,7 +31,6 @@ object Replica {
 
   case class PersistTimeout(id: Long) extends OperationReply
 
-  case class ReplicateFailed(id: Long) extends OperationReply
 
   case class OperationFailed(id: Long) extends OperationReply
 
@@ -57,6 +56,10 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   // the current set of replicators
   var replicators = Set.empty[ActorRef]
 
+  // to have refercnbes to ongoing repls
+  var globalRepls = Set.empty[ActorRef]
+
+
   var seqNumber = 0
 
   //sending join message back to arbiter to register as Primary/Secondary replica
@@ -64,16 +67,12 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
   def receive = {
     case JoinedPrimary => context.become(leader)
-    case JoinedSecondary => context.become(replica)
+    case JoinedSecondary => {
+      context.become(replica)
+    }
   }
 
-
-  def sendToReplicas(msg: Replicate) {
-    //TODO send message to replicas
-  }
-
-
-  def scheduleOnceOperationReply(timeout: FiniteDuration,msg: OperationReply) {
+  def scheduleOnceOperationReply(timeout: FiniteDuration, msg: OperationReply) {
     context.system.scheduler.scheduleOnce(timeout,
       self,
       msg)
@@ -95,73 +94,88 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   }
 
   // mapping for sent to persistent messages : id->(key,cancellable,sender)
-  var awaitPersistFromLeader = Map.empty[Long, (Operation, Cancellable, ActorRef)]
+  var awaitPersistFromLeader = Map.empty[Long, (Option[String], Cancellable, ActorRef)]
 
   // mapping for sent to persistentr messages : id->(key,seq)
   var awaitPersistFromReplica = Map.empty[Long, (String, Long, Cancellable, ActorRef)]
 
-  var awaitReplicate = Map.empty[ActorRef, List[Long]]
 
   /* Behavior for  the PRIMARY role. */
   val leader: Receive = ({
-    // TODO failed receive or remove , 1 second - >OperationFailed
     case Insert(key, value, id) => {
       kv += (key -> value)
       // persist every 100ms
       val persistCancellable = createScheduledPersister(Persist(key, Some(value), id))
-      awaitPersistFromLeader += (id ->(Insert(key, value, id), persistCancellable, sender))
+      awaitPersistFromLeader += (id ->(Option(value), persistCancellable, sender))
 
       // persist timeout
-      scheduleOnceOperationReply(1 seconds,PersistTimeout(id))
+      scheduleOnceOperationReply(1 seconds, PersistTimeout(id))
     }
     case Remove(key, id) => {
       kv -= (key)
       //persist every 100 ms
       val persistCancellable = createScheduledPersister(Persist(key, None, id))
-      awaitPersistFromLeader += (id ->(Remove(key, id), persistCancellable, sender))
+      awaitPersistFromLeader += (id ->(None, persistCancellable, sender))
 
       // persist timeout 1s
-      scheduleOnceOperationReply(1 seconds,PersistTimeout(id))
+      scheduleOnceOperationReply(1 seconds, PersistTimeout(id))
     }
     case Persisted(key, id) => {
-      val (operation, cancellable, recipient) = awaitPersistFromLeader(id)
+      println(s"Replica  : $self got ${Persisted(key, id)}")
+      val (value, cancellable, recipient) = awaitPersistFromLeader(id)
       cancellable.cancel()
       awaitPersistFromLeader -= id
       if (secondaries.isEmpty) {
         recipient ! OperationAck(id)
       }
       else {
-        //no OperationAck waiting for Replicated
-        secondaries.foreach(key_value => {
-          replicators foreach (r => r ! Replicate(key, Option(operation.key), new Random().nextLong()))
-        })
-        // TODO start replication actor
+        //start replicate controller
+        println(s"Replica  : starting ReplicationController")
+        val replController=system.actorOf(ReplicationController.props(id, recipient, replicators, Set(Replicate(key, value, new Random().nextLong()))))
+         context.watch(replController)
+        globalRepls+=replController
       }
 
+    }
 
-    }
-    case GlobalReplicated(id) => {
-      // GlobalReplica
-    }
     case PersistTimeout(id) => {
+      println(s"Replica : PersistTimeout for ${id}")
       sender ! PoisonPill
       if (awaitPersistFromLeader.contains(id)) {
         //timeout of 1 second
-        val (operation, cancellable, recipient) = awaitPersistFromLeader(id)
+        val (_, cancellable, recipient) = awaitPersistFromLeader(id)
         cancellable.cancel()
         awaitPersistFromLeader -= id
         recipient ! OperationFailed(id)
       }
 
     }
+
+
     case Replicas(replicas) => {
-      var replToDoMap = Map.empty[ActorRef, List[Replicate]]
-      //getting a list messages to send
-      var messagesToSend = List.empty[Replicate]
-      kv.foreach(key_value => {
-        val id = new Random().nextLong()
-        messagesToSend = messagesToSend :+ Replicate(key_value._1, Option(key_value._2), id)
+      println(" Replica :  Replicas " + replicas)
+      val messagesToSend: Set[Replicate] = createReplicateMsgFromKV()
+      var replicatorsToSend = Set.empty[ActorRef]
+
+      //terminate removed replicas
+      val removedReplicas = secondaries.keySet diff replicas
+      println(s"Replicas : removed replicas ${removedReplicas}")
+      removedReplicas foreach (r => {
+        //terminate replicator
+        val replicatorToStop = secondaries(r)
+        println(s"Replicas : replicatorToStop : ${replicatorToStop}")
+
+        context.stop(replicatorToStop)
+        secondaries -= r
+        replicators -= replicatorToStop
+        //TODO stop waiting for ack for terminated messgaes
+        println(s"Replicas : ongoing global replicators : ${globalRepls}")
+        globalRepls foreach (globRepl => {
+          globRepl ! KillMsgReplicator(replicatorToStop)
+        })
       })
+
+      //
       replicas foreach (rep => {
         if (rep != self) {
           //already know it
@@ -170,20 +184,43 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
             secondaries += (rep -> replicator)
             replicators += replicator
             //ad all key values
-            replToDoMap += replicator -> messagesToSend
+            replicatorsToSend += replicator
           }
-
+          else {
+            // already have the replica
+            replicatorsToSend += secondaries(rep)
+          }
         }
-
       })
+      // do we have messages to send?
+      if (!messagesToSend.isEmpty && !replicatorsToSend.isEmpty) {
+        println("Replicas : will send  " + messagesToSend)
+        println("Replicas : will to  " + replicatorsToSend)
+        val globalRepl = system.actorOf(GlobalReplicator.props(replicatorsToSend, messagesToSend))
+        context.watch(globalRepl)
+        println("Replicas  : adding ")
+        globalRepls+=globalRepl
+      }
 
-      val globalReplicator = system.actorOf(GlobalReplicationActor.props(), "global_rep_" + new Random().nextLong())
-      globalReplicator ! GlobalReplicate(replToDoMap)
-      //TODO check all replicas , add/remove
+
     }
+
+    case Terminated(target) => {
+      println(s"Replica : terminated $target")
+      globalRepls -= target
+    }
+
   }: Receive) orElse common
   // end PRIMARY behaviour
 
+  def createReplicateMsgFromKV(): Set[Replicate] = {
+    var messagesToSend = Set.empty[Replicate]
+    kv.foreach(key_value => {
+      val id = new Random().nextLong()
+      messagesToSend = messagesToSend + Replicate(key_value._1, Option(key_value._2), id)
+    })
+    messagesToSend
+  }
 
   override def supervisorStrategy: SupervisorStrategy = OneForOneStrategy() {
     case _: PersistenceException => {

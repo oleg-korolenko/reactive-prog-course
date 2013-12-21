@@ -45,6 +45,7 @@ class Step6_NewSecondarySpec extends TestKit(ActorSystem("Step6NewSecondarySpec"
     secondary.expectMsg(Snapshot("k1", None, 2L))
     secondary.reply(SnapshotAck("k1", 2L))
     user.waitAck(ack2)
+
   }
 
   test("case2: Primary must stop replication to removed replicas and stop Replicator") {

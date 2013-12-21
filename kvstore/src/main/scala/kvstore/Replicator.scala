@@ -40,10 +40,12 @@ class Replicator(val replica: ActorRef) extends Actor {
     ret
   }
 
-  /* TODO Behavior for the Replicator. */
+
   def receive: Receive = {
     case Replicate(key, valueOption, id) => {
       val seq = nextSeq
+      println("Replicator :  for="+  Replicate(key, valueOption, id))
+      println("Replicator :  snapshot="+  Snapshot(key, valueOption, seq))
       val cancellable = context.system.scheduler.schedule(0 milliseconds,
         100 milliseconds,
         replica,
