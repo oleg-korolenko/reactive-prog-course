@@ -54,6 +54,8 @@ class Replicator(val replica: ActorRef) extends Actor {
 
     }
     case SnapshotAck(key, seq) => {
+      println(s"Replicators: received ${SnapshotAck(key,seq)}")
+      println(s"Replicators: removing for schedulmed snapshot maps $acks")
       acks(seq)._3.cancel()
       val (actRef, replicate,_) = acks(seq)
       acks -= seq

@@ -103,6 +103,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   /* Behavior for  the PRIMARY role. */
   val leader: Receive = ({
     case Insert(key, value, id) => {
+      println(s"replica  : INSERT ${Insert(key, value, id)}")
       kv += (key -> value)
       // persist every 100ms
       val persistCancellable = createScheduledPersister(Persist(key, Some(value), id))
@@ -112,7 +113,8 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
       scheduleOnceOperationReply(1 seconds, PersistTimeout(id))
     }
     case Remove(key, id) => {
-      kv -= (key)
+      println(s"replica  : REMOVE ${Remove(key, id)}")
+      kv -= key
       //persist every 100 ms
       val persistCancellable = createScheduledPersister(Persist(key, None, id))
       awaitPersistFromLeader += (id ->(None, persistCancellable, sender))
@@ -145,6 +147,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
         //timeout of 1 second
         val (_, cancellable, recipient) = awaitPersistFromLeader(id)
         cancellable.cancel()
+        println(s"Replica : PersistTimeout - >remove await for  ${awaitPersistFromLeader(id)}")
         awaitPersistFromLeader -= id
         recipient ! OperationFailed(id)
       }
@@ -207,6 +210,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
     case Terminated(target) => {
       println(s"Replica : terminated $target")
+
       globalRepls -= target
     }
 
