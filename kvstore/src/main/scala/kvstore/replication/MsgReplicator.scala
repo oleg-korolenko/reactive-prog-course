@@ -1,4 +1,4 @@
-package kvstore
+package kvstore.replication
 
 import akka.actor.{Props, ActorRef, Actor}
 import kvstore.Replicator.{Replicated, Replicate}

@@ -1,9 +1,9 @@
-package kvstore
+package kvstore.replication
 
 import kvstore.Replicator.{Replicated, Replicate}
 import akka.actor._
 import akka.actor
-import kvstore.GlobalReplicator.KillMsgReplicator
+import kvstore.replication.GlobalReplicator.KillMsgReplicator
 
 
 object GlobalReplicator {

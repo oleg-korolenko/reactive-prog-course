@@ -8,7 +8,8 @@ import scala.concurrent.duration._
 import scala.Some
 import akka.actor.OneForOneStrategy
 import kvstore.Arbiter.Replicas
-import kvstore.GlobalReplicator.KillMsgReplicator
+import kvstore.replication.{ReplicationController, GlobalReplicator}
+import GlobalReplicator.KillMsgReplicator
 
 
 object Replica {

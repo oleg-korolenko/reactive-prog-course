@@ -1,4 +1,4 @@
-package kvstore
+package kvstore.replication
 
 import akka.actor._
 import scala.concurrent.duration._
@@ -7,7 +7,7 @@ import kvstore.Replica.OperationFailed
 import kvstore.Replica.OperationAck
 import kvstore.Replicator.Replicate
 import java.util.Random
-import kvstore.GlobalReplicator.KillMsgReplicator
+import kvstore.replication.GlobalReplicator.KillMsgReplicator
 
 object ReplicationController {
 
