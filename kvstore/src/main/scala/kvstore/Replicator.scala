@@ -44,22 +44,27 @@ class Replicator(val replica: ActorRef) extends Actor {
   def receive: Receive = {
     case Replicate(key, valueOption, id) => {
       val seq = nextSeq
-      println("Replicator :  for="+  Replicate(key, valueOption, id))
-      println("Replicator :  snapshot="+  Snapshot(key, valueOption, seq))
+      println("Replicator :  for=" + Replicate(key, valueOption, id))
+      println("Replicator :  snapshot=" + Snapshot(key, valueOption, seq))
       val cancellable = context.system.scheduler.schedule(0 milliseconds,
         100 milliseconds,
         replica,
         Snapshot(key, valueOption, seq))
+      println(s"Replicator :  adding to acks =$seq")
       acks += (seq ->(sender, Replicate(key, valueOption, id), cancellable))
 
     }
     case SnapshotAck(key, seq) => {
-      println(s"Replicators: received ${SnapshotAck(key,seq)}")
-      println(s"Replicators: removing for schedulmed snapshot maps $acks")
-      acks(seq)._3.cancel()
-      val (actRef, replicate,_) = acks(seq)
-      acks -= seq
-      actRef ! Replicated(key, replicate.id)
+      println(s"Replicators: received ${SnapshotAck(key, seq)} from $sender")
+      println(s"Replicators: all acks ${acks.keySet}")
+      println(s"Replicators: cancelling  $seq")
+      if(acks.contains(seq)){
+        acks(seq)._3.cancel()
+        val (actRef, replicate, _) = acks(seq)
+        actRef ! Replicated(key, replicate.id)
+        acks -= seq
+      }
+
     }
     case _ =>
   }

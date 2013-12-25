@@ -1,0 +1,19 @@
+new root = Actor[akka://PostponeSpec/user/$a/$b#-884884759]
+old  root = Actor[akka://PostponeSpec/user/$a/$a#181467413]
+OperationFinished(0)  from  actorbintree.BinaryTreeNode@e39d3bf with value 80 after insert to Actor[akka://PostponeSpec/system/testActor2#628729286]
+enqueue Remove(Actor[akka://PostponeSpec/system/testActor2#628729286],8,97)
+Copy to subtrees  CopyTo(Actor[akka://PostponeSpec/user/$a/$b#-884884759]) to Actor[akka://PostponeSpec/user/$a/$a/$a#447872039]
+OperationFinished(7)  from  actorbintree.BinaryTreeNode@2577d2c2 with value 56 after insert to Actor[akka://PostponeSpec/system/testActor2#628729286]
+Insert to new tree Insert(Actor[akka://PostponeSpec/user/$a/$a/$a#447872039],107937147,80)
+Copy to subtrees  CopyTo(Actor[akka://PostponeSpec/user/$a/$b#-884884759]) to Actor[akka://PostponeSpec/user/$a/$a/$a/$a#-1135684293]
+Insert to new tree Insert(Actor[akka://PostponeSpec/user/$a/$a/$a/$a#-1135684293],-2076845603,56)
+OperationFinished(-1)  from  actorbintree.BinaryTreeNode@4dc834d6 with value 80 after insert to Actor[akka://PostponeSpec/user/$a/$a/$a#447872039]
+OperationFinished(-1)  from  actorbintree.BinaryTreeNode@1304f57f with value 56 after insert to Actor[akka://PostponeSpec/user/$a/$a/$a/$a#-1135684293]
+Sending up copyFinished after OperationFInished to parent   Actor[akka://PostponeSpec/user/$a/$a/$a#447872039] from actorbintree.BinaryTreeNode@2a916e9awith value 56
+Sending up copyFinished to parent   Actor[akka://PostponeSpec/user/$a/$a#181467413] from actorbintree.BinaryTreeNode@2577d2c2with value 80
+Sending up copyFinished to parent   Actor[akka://PostponeSpec/user/$a#-76454512] from actorbintree.BinaryTreeNode@e39d3bfwith value 0
+ treeset copy finished from Actor[akka://PostponeSpec/user/$a/$a#181467413]
+ root Actor[akka://PostponeSpec/user/$a/$a#181467413]
+ newroot Actor[akka://PostponeSpec/user/$a/$b#-884884759]
+from queue = Remove(Actor[akka://PostponeSpec/system/testActor2#628729286],8,97)
+Remove finished with value  97 to Actor[akka://PostponeSpec/system/testActor2#628729286]

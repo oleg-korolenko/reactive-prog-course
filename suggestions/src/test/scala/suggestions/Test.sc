@@ -1,4 +1,4 @@
-/**
+extends FunSuite/**
  * Created with IntelliJ IDEA.
  * User: oleg
  * Date: 5/12/13

@@ -24,6 +24,7 @@ class Persistence(flaky: Boolean) extends Actor {
         context.stop(self)
       }
       else {
+        println(s"Persistencce : failure ${Persist(key, value, id)}")
         throw new PersistenceException
       }
   }

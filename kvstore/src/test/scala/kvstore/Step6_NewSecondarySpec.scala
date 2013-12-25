@@ -11,11 +11,11 @@ import Arbiter._
 import Replicator._
 
 class Step6_NewSecondarySpec extends TestKit(ActorSystem("Step6NewSecondarySpec"))
-  with FunSuite
-  with BeforeAndAfterAll
-  with ShouldMatchers
-  with ImplicitSender
-  with Tools {
+with FunSuite
+with BeforeAndAfterAll
+with ShouldMatchers
+with ImplicitSender
+with Tools {
 
   override def afterAll(): Unit = {
     system.shutdown()
@@ -40,6 +40,7 @@ class Step6_NewSecondarySpec extends TestKit(ActorSystem("Step6NewSecondarySpec"
     secondary.expectMsg(Snapshot("k1", Some("v2"), 1L))
     secondary.reply(SnapshotAck("k1", 1L))
     user.waitAck(ack1)
+
 
     val ack2 = user.remove("k1")
     secondary.expectMsg(Snapshot("k1", None, 2L))

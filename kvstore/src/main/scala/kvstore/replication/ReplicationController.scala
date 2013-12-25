@@ -15,7 +15,7 @@ object ReplicationController {
 }
 
 class ReplicationController(id: Long, recipient: ActorRef, replicators: Set[ActorRef], messages: Set[Replicate]) extends Actor {
-  println("Started Replication controller with ")
+  println("START Replication controller with ")
   println("---- msgId " + id)
   println("---- messages" + messages)
   println("---- replicators" + replicators)
@@ -34,9 +34,9 @@ class ReplicationController(id: Long, recipient: ActorRef, replicators: Set[Acto
     }
     case Terminated(_) => {
       //global replication is finished
-      println(s"ReplicationController : finished for $id ")
+      println(s"ReplicationController :  sending ${OperationAck(id)}")
       recipient ! OperationAck(id)
-      context.stop(self)
+      self ! PoisonPill
     }
   }
 }

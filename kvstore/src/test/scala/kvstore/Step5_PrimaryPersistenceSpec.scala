@@ -64,6 +64,8 @@ with Tools {
     client.waitAck(setId)
   }
 
+
+
   test("case3: Primary generates failure after 1 second if persistence fails") {
     val arbiter = TestProbe()
     val persistence = TestProbe()
